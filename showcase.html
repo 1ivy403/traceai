@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TraceAI 展示页</title>
+  <style>
+    :root { --bg:#0c0f14; --surface:#151a24; --border:#2a3344; --text:#e8ecf4; --muted:#8b95a8; --accent:#5b9cff; }
+    body { font-family: system-ui, "PingFang SC", sans-serif; background: var(--bg); color: var(--text); max-width: 720px; margin: 0 auto; padding: 1.5rem; line-height: 1.55; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
+    .lead { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 0.85rem; }
+    .card h2 { margin: 0 0 0.35rem; font-size: 1rem; }
+    .meta { font-size: 0.75rem; color: var(--muted); }
+    .tag { display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.35rem; margin-right: 0.25rem; border-radius: 4px; background: rgba(91,156,255,.15); color: var(--accent); }
+    .upload { border: 1px dashed var(--border); padding: 1.5rem; text-align: center; border-radius: 10px; color: var(--muted); margin-bottom: 1rem; }
+    label.btn { display: inline-block; background: var(--accent); color: #fff; padding: 0.45rem 0.85rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+    input[type=file] { display: none; }
+    footer { margin-top: 2rem; font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>TraceAI 展示页</h1>
+  <p class="lead">只读视图 · 由作者选择性导出的想法，不含完整对话记录</p>
+  <div class="upload" id="drop">
+    <p>拖入 <code>traceai-share-*.json</code> 或</p>
+    <label class="btn">选择展示包<input type="file" id="file" accept=".json,application/json" /></label>
+  </div>
+  <div id="list"></div>
+  <footer>使用 TraceAI 本地版生成 · 数据未经过任何服务器</footer>
+  <script>
+    const embedded = null; /* EXPORT_EMBED */
+    function render(pack) {
+      document.getElementById("drop").style.display = "none";
+      const list = document.getElementById("list");
+      const atoms = pack.atoms || [];
+      if (!atoms.length) {
+        list.innerHTML = "<p class=lead>展示包为空</p>";
+        return;
+      }
+      list.innerHTML = atoms.map((a) => `
+        <article class="card">
+          <h2>${esc(a.title)}</h2>
+          <div class="meta">${esc(a.status || "")} · ${(a.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          <p>${esc(a.body || "")}</p>
+          ${a.next_step ? `<p><strong>下一步</strong>：${esc(a.next_step)}</p>` : ""}
+        </article>`).join("");
+      document.title = (pack.title || "TraceAI") + " · 展示";
+      document.querySelector("h1").textContent = pack.title || "我的想法地图";
+    }
+    function esc(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    function load(json) {
+      try {
+        const pack = typeof json === "string" ? JSON.parse(json) : json;
+        render(pack);
+      } catch (e) {
+        alert("无法读取展示包：" + e.message);
+      }
+    }
+    document.getElementById("file").onchange = (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => load(r.result);
+      r.readAsText(f);
+    };
+    const drop = document.getElementById("drop");
+    drop.ondragover = (e) => { e.preventDefault(); };
+    drop.ondrop = (e) => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) {
+        const r = new FileReader();
+        r.onload = () => load(r.result);
+        r.readAsText(f);
+      }
+    };
+    if (embedded) load(embedded);
+  </script>
+</body>
+</html>
