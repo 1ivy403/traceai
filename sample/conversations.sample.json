@@ -1,0 +1,54 @@
+[
+  {
+    "uuid": "sample-session-001",
+    "name": "AI PM 作品集方向 brainstorm",
+    "created_at": "2026-05-20T10:00:00Z",
+    "updated_at": "2026-05-20T10:45:00Z",
+    "chat_messages": [
+      {
+        "uuid": "m1",
+        "sender": "human",
+        "text": "我想把和 AI 的对话整理成可追溯的知识地图，有什么 MVP 方向？",
+        "created_at": "2026-05-20T10:00:00Z"
+      },
+      {
+        "uuid": "m2",
+        "sender": "assistant",
+        "text": "可以从三个方向切入：\n\n1. **归档型**：把 Claude 导出 JSON 存进 Obsidian，用 Graph View 看连接。\n2. **决策型**：每条想法标记「探索 / 继续 / 作品集候选」，回答「下一步从哪继续」。\n3. **作品型**：能导出 Markdown 包，直接变成申请材料或案例页。\n\nMVP 建议先做决策型：上传 conversations.json → 拆原子想法 → 图谱 + 状态筛选。不要一上来做 LLM 自动归类，用户会失去控制感。",
+        "created_at": "2026-05-20T10:05:00Z"
+      },
+      {
+        "uuid": "m3",
+        "sender": "human",
+        "text": "和 Kept、GitMemo 有什么区别？",
+        "created_at": "2026-05-20T10:10:00Z"
+      },
+      {
+        "uuid": "m4",
+        "sender": "assistant",
+        "text": "Kept/GitMemo 偏「把聊天存下来、可搜索」。你的差异化是「回答行动问题」：\n- 哪些想法值得继续？\n- 哪些能变作品集？\n- 想法之间有什么关系？\n\n所以 MVP 要有：状态字段、next_step、作品集候选筛选、导出 Obsidian 包。",
+        "created_at": "2026-05-20T10:15:00Z"
+      }
+    ]
+  },
+  {
+    "uuid": "sample-session-002",
+    "name": "Spec-driven 工具选型",
+    "created_at": "2026-05-22T14:00:00Z",
+    "updated_at": "2026-05-22T14:30:00Z",
+    "chat_messages": [
+      {
+        "uuid": "m5",
+        "sender": "human",
+        "text": "Cursor Plan Mode、Kiro、Spec Kit 怎么选？我没预算订阅。",
+        "created_at": "2026-05-22T14:00:00Z"
+      },
+      {
+        "uuid": "m6",
+        "sender": "assistant",
+        "text": "作为 AI PM、零代码背景：\n\n- **Cursor Plan Mode**：已在用 Cursor 就选它，Shift+Tab 先澄清再 Build，零额外成本。\n- **Kiro**：Spec 流程完整但免费档 Spec 次数为 0，不必付费；逻辑可用 requirements/design/tasks 三件套在 Markdown 里手写复现。\n- **Spec Kit / OpenSpec**：给工程团队用的，solo PM 过重。\n\n结论：日常用 Plan Mode；长期知识沉淀走 Obsidian + Git，不必为 Kiro 付费。",
+        "created_at": "2026-05-22T14:20:00Z"
+      }
+    ]
+  }
+]
