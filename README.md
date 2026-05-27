@@ -4,14 +4,59 @@
 
 > 零后端 · 零 API Key · 数据默认仅存本机浏览器
 
-## 在线 Demo
+## 隐私模型
 
-https://1ivy403.github.io/traceai/
-
-本地：`python3 -m http.server 8080`
+| 层级 | 说明 |
+|------|------|
+| **仅本地**（默认） | 存在 `localStorage`，不上传、不导出（除非你主动备份） |
+| **可对外展示** | 你在卡片上勾选后，才可进入展示包 JSON / 展示页 HTML |
+| **脱敏选项** | 导出展示内容时可隐藏原始 Claude 会话标题 |
 
 详见 [docs/PRIVACY.md](docs/PRIVACY.md)
 
+## 推荐使用方式
+
+```bash
+cd traceai
+python3 -m http.server 8080
+# 浏览器打开 http://localhost:8080
+```
+
+**不要**把个人 `conversations.json` 或 `traceai-backup-*.json` 提交到公开仓库。GitHub Pages 只适合托管 Demo 空壳 + `sample/`。
+
+## 功能
+
+| 能力 | 说明 |
+|------|------|
+| 导入 Claude JSON | 解析为原子想法 + 关系图谱 |
+| 五类视图 + **可展示** | 筛选你允许对外公开的想法 |
+| 本地备份 | 完整 `.json` 备份/恢复（含私密内容） |
+| 展示包 JSON | 仅含「可展示」条目，可发给他人 |
+| 展示页 HTML | 独立单页，可托管作品集 |
+| Obsidian 导出 | 完整版 / 仅可展示版 |
+
+## 它回答的 5 个问题
+
+| 问题 | TraceAI 怎么做 |
+|------|----------------|
+| 我和 AI 想过什么？ | 本机图谱 + 列表（默认私密） |
+| 哪些值得继续？ | 状态「继续」+ 专属 Tab |
+| 想法之间什么关系？ | 同标签 / 同会话连线 |
+| 什么能变作品集？ | 勾选可展示 → 导出展示页 |
+| 下一步从哪继续？ | `next_step` 字段 + Tab |
+
+## 与 Kept / GitMemo
+
+它们偏归档同步；TraceAI 偏 **行动 + 选择性公开**。
+
+## 路线图
+
+| 版本 | 内容 |
+|------|------|
+| **v0.2**（当前） | 本地隐私 + 选择性展示 + 展示包/页 |
+| v0.3 | 纯文本 / Cursor 导入 |
+| v0.4 | Obsidian vault `/ingest` |
+
 ## License
 
-MIT
+MIT — [LICENSE](LICENSE)
