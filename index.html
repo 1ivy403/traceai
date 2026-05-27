@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TraceAI — 本地隐私 · AI 对话知识地图</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a24;
+      --border: #2a3344;
+      --text: #e8ecf4;
+      --muted: #8b95a8;
+      --accent: #5b9cff;
+      --keep: #3dd68c;
+      --warn: #f0c674;
+      --private: #6b7a94;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .privacy-bar {
+      background: rgba(61, 214, 140, 0.08);
+      border-bottom: 1px solid rgba(61, 214, 140, 0.25);
+      padding: 0.4rem 1.25rem;
+      font-size: 0.78rem;
+      color: var(--keep);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: center;
+    }
+    .privacy-bar label { color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 0.35rem; }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    header h1 { margin: 0; font-size: 1.25rem; }
+    header .sub { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; max-width: 420px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; max-width: 520px; justify-content: flex-end; }
+    .toolbar-group { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+    .toolbar-group span { font-size: 0.7rem; color: var(--muted); width: 100%; }
+    button, label.btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    button.ghost, label.btn.ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    button.share { border-color: var(--keep); color: var(--keep); }
+    label.btn { display: inline-block; }
+    input[type="file"] { display: none; }
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .tabs button {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid transparent;
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+    .tabs button.active {
+      color: var(--text);
+      border-color: var(--border);
+      background: var(--surface);
+    }
+    .map-filter {
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    main { display: grid; grid-template-columns: 1fr 360px; gap: 0; min-height: calc(100vh - 168px); }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      #graph-panel { min-height: 320px; }
+    }
+    #graph-panel, #list-panel { padding: 1rem; overflow: auto; }
+    #graph {
+      width: 100%;
+      height: min(70vh, 600px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+    .card.shareable { border-left: 3px solid var(--keep); }
+    .card.local-only { border-left: 3px solid var(--private); }
+    .card.highlight { outline: 2px solid var(--accent); }
+    .badge-vis {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      margin-left: 0.35rem;
+      vertical-align: middle;
+    }
+    .badge-vis.on { background: rgba(61,214,140,.2); color: var(--keep); }
+    .badge-vis.off { background: rgba(107,122,148,.2); color: var(--private); }
+    .card h3 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+    .card .meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .card p.body { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; max-height: 4em; overflow: hidden; }
+    .card select, .card input, .card textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.35rem 0.5rem;
+      font-size: 0.8rem;
+      margin-top: 0.35rem;
+    }
+    .card textarea { min-height: 2.5rem; resize: vertical; }
+    .row-check { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; font-size: 0.8rem; }
+    .row-check input { width: auto; margin: 0; }
+    .tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.35rem; }
+    .tag {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(91, 156, 255, 0.15);
+      color: var(--accent);
+    }
+    .empty { color: var(--muted); text-align: center; padding: 3rem 1rem; }
+    #search {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 0.65rem;
+    }
+    .stats { font-size: 0.8rem; color: var(--muted); padding: 0 1rem 0.5rem; }
+    .toast {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--keep);
+      color: var(--keep);
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      z-index: 100;
+      display: none;
+      max-width: 320px;
+    }
+    .toast.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="privacy-bar">
+    <span>本地优先：数据仅存本机浏览器，不上传服务器</span>
+    <label><input type="checkbox" id="opt-redact" checked /> 展示包隐藏会话标题</label>
+  </div>
+  <header>
+    <div>
+      <h1>TraceAI</h1>
+      <p class="sub">本地隐私化的 AI 对话知识地图 — 默认仅自己可见，由你勾选「可对外展示」后再导出</p>
+    </div>
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <span>导入</span>
+        <label class="btn">Claude JSON<input type="file" id="file-input" accept=".json,application/json" /></label>
+        <label class="btn ghost">本地备份<input type="file" id="backup-input" accept=".json,application/json" /></label>
+        <button type="button" class="ghost" id="btn-demo">示例 Demo</button>
+      </div>
+      <div class="toolbar-group">
+        <span>仅本地</span>
+        <button type="button" class="ghost" id="btn-backup">导出备份</button>
+        <button type="button" class="ghost" id="btn-export-full">Obsidian 完整</button>
+      </div>
+      <div class="toolbar-group">
+        <span>选择性展示</span>
+        <button type="button" class="ghost share" id="btn-share-pack">展示包 JSON</button>
+        <button type="button" class="ghost share" id="btn-showcase">展示页 HTML</button>
+        <button type="button" class="ghost share" id="btn-preview">预览展示</button>
+        <button type="button" class="ghost" id="btn-export-share">Obsidian 可展示</button>
+      </div>
+      <button type="button" class="ghost" id="btn-clear" title="清空本机数据">清空</button>
+    </div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="stats" id="stats"></div>
+
+  <main>
+    <section id="graph-panel">
+      <div id="graph"></div>
+    </section>
+    <section id="list-panel">
+      <input type="search" id="search" placeholder="搜索想法…" />
+      <div id="cards"></div>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const STORAGE_KEY = "traceai-v2";
+    const STORAGE_KEY_LEGACY = "traceai-v1";
+    const STATUSES = ["探索", "继续", "沉淀", "作品集候选"];
+    const TAG_WHITELIST = ["AI PM", "Spec", "作品集", "求职", "产品", "Obsidian", "工具选型", "MVP", "知识地图", "对话整理"];
+
+    const TABS = [
+      { id: "map", label: "地图" },
+      { id: "all", label: "全部想法" },
+      { id: "shareable", label: "可展示" },
+      { id: "continue", label: "值得继续" },
+      { id: "portfolio", label: "作品集候选" },
+      { id: "next", label: "下一步" },
+    ];
+
+    let state = { sessions: [], atoms: [], activeTab: "map", mapShareableOnly: false };
+    let network = null;
+
+    function isShareable(a) {
+      return a.visibility === "shareable";
+    }
+
+    function slugify(s) {
+      return (s || "idea").slice(0, 40).replace(/[^\w\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || "idea";
+    }
+
+    function getMessageText(msg) {
+      if (msg.text) return msg.text;
+      if (Array.isArray(msg.content)) return msg.content.map((c) => (c.text || c)).join("\n");
+      return "";
+    }
+
+    function inferTags(text) {
+      const found = [];
+      for (const t of TAG_WHITELIST) if (text.includes(t)) found.push(t);
+      return found.slice(0, 3);
+    }
+
+    function makeAtom(title, body, sessionId, sessionName, msgId, createdAt, index) {
+      const id = `${sessionId}-${msgId}-${index}`;
+      const combined = title + body;
+      return {
+        id,
+        title: title || "未命名想法",
+        body,
+        sessionId,
+        sessionName,
+        msgId,
+        createdAt: createdAt || new Date().toISOString(),
+        status: "探索",
+        tags: inferTags(combined),
+        next_step: "",
+        visibility: "local",
+      };
+    }
+
+    function normalizeAtom(a) {
+      if (!a.visibility) a.visibility = "local";
+      return a;
+    }
+
+    function splitAssistantIntoAtoms(text, sessionId, sessionName, msgId, createdAt) {
+      const atoms = [];
+      const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+      const listItems = lines.filter((l) => /^(\d+\.|[-*•])\s+/.test(l));
+      if (listItems.length >= 2) {
+        listItems.slice(0, 5).forEach((line, i) => {
+          const title = line.replace(/^(\d+\.|[-*•])\s+/, "").replace(/\*\*/g, "").slice(0, 80);
+          atoms.push(makeAtom(title, line, sessionId, sessionName, msgId, createdAt, i));
+        });
+        return atoms;
+      }
+      if (text.length > 120) {
+        const sentences = text.split(/[。！？\n]+/).filter((s) => s.trim().length > 10);
+        const title = (sentences[0] || text).slice(0, 80).replace(/\*\*/g, "");
+        atoms.push(makeAtom(title, text, sessionId, sessionName, msgId, createdAt, 0));
+      }
+      return atoms;
+    }
+
+    function parseClaudeExport(data) {
+      const conversations = Array.isArray(data) ? data : data.conversations || [];
+      const sessions = [];
+      const atoms = [];
+      conversations.forEach((conv) => {
+        const sessionId = conv.uuid || conv.id || "unknown-" + Math.random().toString(36).slice(2, 8);
+        const messages = conv.chat_messages || conv.messages || [];
+        sessions.push({
+          id: sessionId,
+          name: conv.name || "未命名会话",
+          createdAt: conv.created_at || conv.createdAt,
+          messageCount: messages.length,
+        });
+        messages.forEach((msg) => {
+          const sender = (msg.sender || msg.role || "").toLowerCase();
+          if (sender !== "assistant" && sender !== "claude") return;
+          const text = getMessageText(msg);
+          if (text.length < 120) return;
+          atoms.push(
+            ...splitAssistantIntoAtoms(text, sessionId, conv.name || "未命名会话", msg.uuid || msg.id || "m", msg.created_at || msg.createdAt)
+          );
+        });
+      });
+      return { sessions, atoms };
+    }
+
+    function mergeWithSaved(newSessions, newAtoms) {
+      const saved = loadStateRaw();
+      const meta = {};
+      (saved.atoms || []).forEach((a) => {
+        meta[a.id] = {
+          status: a.status,
+          tags: a.tags,
+          next_step: a.next_step,
+          visibility: a.visibility,
+        };
+      });
+      newAtoms.forEach((a) => {
+        normalizeAtom(a);
+        if (meta[a.id]) {
+          a.status = meta[a.id].status;
+          a.tags = meta[a.id].tags?.length ? meta[a.id].tags : a.tags;
+          a.next_step = meta[a.id].next_step || "";
+          a.visibility = meta[a.id].visibility || "local";
+        }
+      });
+      return { sessions: newSessions, atoms: newAtoms };
+    }
+
+    function loadStateRaw() {
+      try {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          raw = localStorage.getItem(STORAGE_KEY_LEGACY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            (parsed.atoms || []).forEach(normalizeAtom);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          }
+        }
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      return { sessions: [], atoms: [], activeTab: "map", mapShareableOnly: false };
+    }
+
+    function loadState() {
+      const s = loadStateRaw();
+      (s.atoms || []).forEach(normalizeAtom);
+      if (s.mapShareableOnly === undefined) s.mapShareableOnly = false;
+      return s;
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2800);
+    }
+
+    function redactSessionNames() {
+      return document.getElementById("opt-redact").checked;
+    }
+
+    function getShareableAtoms() {
+      return state.atoms.filter(isShareable);
+    }
+
+    function atomForShare(a) {
+      const copy = {
+        id: a.id,
+        title: a.title,
+        body: a.body,
+        status: a.status,
+        tags: a.tags || [],
+        next_step: a.next_step || "",
+        createdAt: a.createdAt,
+      };
+      if (!redactSessionNames()) copy.sessionName = a.sessionName;
+      return copy;
+    }
+
+    function buildSharePack() {
+      const shareable = getShareableAtoms().map(atomForShare);
+      return {
+        format: "traceai-share",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        title: "我的想法地图（精选）",
+        redactedSessions: redactSessionNames(),
+        atoms: shareable,
+      };
+    }
+
+    function getFilteredAtoms() {
+      const q = (document.getElementById("search").value || "").trim().toLowerCase();
+      let list = state.atoms;
+      if (state.activeTab === "shareable") list = list.filter(isShareable);
+      else if (state.activeTab === "continue") list = list.filter((a) => a.status === "继续");
+      else if (state.activeTab === "portfolio") list = list.filter((a) => a.status === "作品集候选");
+      else if (state.activeTab === "next") list = list.filter((a) => (a.next_step || "").trim());
+      if (q) {
+        list = list.filter(
+          (a) =>
+            a.title.toLowerCase().includes(q) ||
+            a.body.toLowerCase().includes(q) ||
+            (a.sessionName || "").toLowerCase().includes(q)
+        );
+      }
+      return list;
+    }
+
+    function atomsForMap() {
+      if (state.mapShareableOnly) return getShareableAtoms();
+      return state.atoms;
+    }
+
+    function renderTabs() {
+      const container = document.getElementById("tabs");
+      const mapFilter =
+        state.activeTab === "map"
+          ? `<label class="map-filter"><input type="checkbox" id="map-share-only" ${state.mapShareableOnly ? "checked" : ""}/> 地图仅显示「可展示」</label>`
+          : "";
+      container.innerHTML =
+        TABS.map(
+          (t) =>
+            `<button type="button" data-tab="${t.id}" class="${state.activeTab === t.id ? "active" : ""}">${t.label}</button>`
+        ).join("") + mapFilter;
+      container.querySelectorAll("button[data-tab]").forEach((btn) => {
+        btn.onclick = () => {
+          state.activeTab = btn.dataset.tab;
+          saveState();
+          render();
+        };
+      });
+      const cb = document.getElementById("map-share-only");
+      if (cb) {
+        cb.onchange = () => {
+          state.mapShareableOnly = cb.checked;
+          saveState();
+          render();
+        };
+      }
+    }
+
+    function renderStats() {
+      const n = state.atoms.length;
+      const share = getShareableAtoms().length;
+      const cont = state.atoms.filter((a) => a.status === "继续").length;
+      const port = state.atoms.filter((a) => a.status === "作品集候选").length;
+      document.getElementById("stats").textContent =
+        n === 0
+          ? "尚未导入 — 数据仅存本机。勾选「可对外展示」后才会进入展示包 / 展示页。"
+          : `本机 ${n} 条想法 · ${share} 条可对外展示 · ${cont} 条继续 · ${port} 条作品集候选 · 未上传云端`;
+    }
+
+    function buildGraphData(atomList) {
+      const nodes = [];
+      const edges = [];
+      const ids = new Set(atomList.map((a) => a.id));
+      atomList.forEach((a) => {
+        let color = "#5b9cff";
+        if (a.status === "继续") color = "#3dd68c";
+        else if (a.status === "作品集候选") color = "#f0c674";
+        else if (a.status === "沉淀") color = "#8b95a8";
+        if (!isShareable(a)) color = "#4a5568";
+        nodes.push({
+          id: a.id,
+          label: a.title.length > 28 ? a.title.slice(0, 26) + "…" : a.title,
+          title: a.title + "\n[" + a.status + "] " + (isShareable(a) ? "可展示" : "仅本地"),
+          color: { background: color, border: isShareable(a) ? "#3dd68c" : color },
+          font: { color: "#e8ecf4", size: 12 },
+        });
+      });
+      const tagMap = {};
+      atomList.forEach((a) => {
+        (a.tags || []).forEach((t) => {
+          if (!tagMap[t]) tagMap[t] = [];
+          tagMap[t].push(a.id);
+        });
+      });
+      Object.values(tagMap).forEach((idsWithTag) => {
+        for (let i = 0; i < idsWithTag.length; i++) {
+          for (let j = i + 1; j < idsWithTag.length; j++) {
+            if (ids.has(idsWithTag[i]) && ids.has(idsWithTag[j])) {
+              edges.push({ from: idsWithTag[i], to: idsWithTag[j], dashes: true, color: { opacity: 0.4 } });
+            }
+          }
+        }
+      });
+      const sessionMap = {};
+      atomList.forEach((a) => {
+        if (!sessionMap[a.sessionId]) sessionMap[a.sessionId] = [];
+        sessionMap[a.sessionId].push(a.id);
+      });
+      Object.values(sessionMap).forEach((sessionAtoms) => {
+        for (let i = 0; i < sessionAtoms.length - 1; i++) {
+          if (ids.has(sessionAtoms[i]) && ids.has(sessionAtoms[i + 1])) {
+            edges.push({ from: sessionAtoms[i], to: sessionAtoms[i + 1], arrows: "to", color: { opacity: 0.25 } });
+          }
+        }
+      });
+      return { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+    }
+
+    function renderGraph(atomList) {
+      const container = document.getElementById("graph");
+      if (state.activeTab !== "map" || atomList.length === 0) {
+        container.innerHTML =
+          atomList.length === 0
+            ? '<div class="empty">暂无数据</div>'
+            : '<div class="empty" style="padding:2rem">切换到「地图」查看关系图</div>';
+        if (network) { network.destroy(); network = null; }
+        return;
+      }
+      const data = buildGraphData(atomList);
+      if (network) network.destroy();
+      network = new vis.Network(container, data, {
+        physics: { stabilization: { iterations: 80 } },
+        interaction: { hover: true, tooltipDelay: 100 },
+      });
+      network.on("click", (params) => {
+        if (params.nodes.length) {
+          const card = document.querySelector(`[data-atom-id="${params.nodes[0]}"]`);
+          card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          card?.classList.add("highlight");
+          setTimeout(() => card?.classList.remove("highlight"), 1500);
+        }
+      });
+    }
+
+    function renderCards(atomList) {
+      const panel = document.getElementById("cards");
+      if (atomList.length === 0) {
+        panel.innerHTML =
+          state.activeTab === "shareable"
+            ? '<div class="empty">还没有标记为「可对外展示」的想法<br><small>在卡片底部勾选即可</small></div>'
+            : '<div class="empty">没有匹配的想法</div>';
+        return;
+      }
+      panel.innerHTML = atomList
+        .map((a) => {
+          const tagOpts = TAG_WHITELIST.map(
+            (t) =>
+              `<label style="font-size:0.75rem;margin-right:0.5rem"><input type="checkbox" data-tag="${t}" ${(a.tags || []).includes(t) ? "checked" : ""}/> ${t}</label>`
+          ).join("");
+          const visClass = isShareable(a) ? "shareable" : "local-only";
+          const visBadge = isShareable(a)
+            ? '<span class="badge-vis on">可展示</span>'
+            : '<span class="badge-vis off">仅本地</span>';
+          return `
+        <div class="card ${visClass}" data-atom-id="${a.id}">
+          <h3>${escapeHtml(a.title)}${visBadge}</h3>
+          <div class="meta">来源：${escapeHtml(a.sessionName)} · ${formatDate(a.createdAt)}</div>
+          <p class="body">${escapeHtml(a.body.slice(0, 200))}${a.body.length > 200 ? "…" : ""}</p>
+          <div class="tags">${(a.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
+          <div class="row-check">
+            <input type="checkbox" data-field="visibility" data-id="${a.id}" ${isShareable(a) ? "checked" : ""} />
+            <span>可对外展示（进入展示包 / 展示页）</span>
+          </div>
+          <label>状态</label>
+          <select data-field="status" data-id="${a.id}">
+            ${STATUSES.map((s) => `<option value="${s}" ${a.status === s ? "selected" : ""}>${s}</option>`).join("")}
+          </select>
+          <label>下一步</label>
+          <textarea data-field="next_step" data-id="${a.id}" placeholder="仅本地或一并导出到展示包…">${escapeHtml(a.next_step || "")}</textarea>
+          <details style="margin-top:0.5rem;font-size:0.8rem;color:var(--muted)">
+            <summary>编辑标签</summary>
+            <div style="margin-top:0.35rem">${tagOpts}</div>
+          </details>
+        </div>`;
+        })
+        .join("");
+
+      panel.querySelectorAll("select[data-field]").forEach((el) => {
+        el.onchange = () => updateAtom(el.dataset.id, el.dataset.field, el.value);
+      });
+      panel.querySelectorAll("textarea[data-field]").forEach((el) => {
+        el.onblur = () => updateAtom(el.dataset.id, el.dataset.field, el.value);
+      });
+      panel.querySelectorAll('input[data-field="visibility"]').forEach((el) => {
+        el.onchange = () => {
+          updateAtom(el.dataset.id, "visibility", el.checked ? "shareable" : "local");
+          render();
+        };
+      });
+      panel.querySelectorAll('input[type="checkbox"][data-tag]').forEach((el) => {
+        el.onchange = () => {
+          const card = el.closest(".card");
+          const atom = state.atoms.find((x) => x.id === card.dataset.atomId);
+          if (!atom) return;
+          atom.tags = [...card.querySelectorAll('input[data-tag]:checked')].map((c) => c.dataset.tag).slice(0, 3);
+          saveState();
+          render();
+        };
+      });
+    }
+
+    function updateAtom(id, field, value) {
+      const atom = state.atoms.find((a) => a.id === id);
+      if (atom) {
+        atom[field] = value;
+        saveState();
+        renderStats();
+      }
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "";
+      try { return new Date(iso).toLocaleDateString("zh-CN"); } catch (e) { return iso; }
+    }
+
+    function downloadBlob(blob, filename) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function render() {
+      renderTabs();
+      renderStats();
+      const list = getFilteredAtoms();
+      document.getElementById("graph-panel").style.display =
+        state.activeTab === "map" || state.activeTab === "all" ? "" : "none";
+      if (state.activeTab !== "map") {
+        if (network) { network.destroy(); network = null; }
+        if (state.activeTab !== "all") document.getElementById("graph").innerHTML = "";
+      }
+      renderGraph(state.activeTab === "map" ? atomsForMap() : []);
+      renderCards(list);
+    }
+
+    function ingestData(sessions, atoms) {
+      state.sessions = sessions;
+      state.atoms = mergeWithSaved(sessions, atoms).atoms.map(normalizeAtom);
+      saveState();
+      render();
+      showToast(`已导入 ${sessions.length} 个会话、${atoms.length} 条想法（仅存本机）`);
+    }
+
+    function handleClaudeFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          const { sessions, atoms } = parseClaudeExport(data);
+          if (atoms.length === 0) {
+            alert("未解析到想法。请确认是 Claude 导出的 conversations.json");
+            return;
+          }
+          ingestData(sessions, atoms);
+        } catch (e) {
+          alert("JSON 解析失败：" + e.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function exportLocalBackup() {
+      const payload = {
+        format: "traceai-backup",
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        state,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      downloadBlob(blob, "traceai-backup-" + new Date().toISOString().slice(0, 10) + ".json");
+      showToast("已导出本地备份（含全部私密内容，请自行保管）");
+    }
+
+    function importLocalBackup(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          const s = data.state || data;
+          if (!s.atoms) throw new Error("不是 TraceAI 备份文件");
+          state = s;
+          (state.atoms || []).forEach(normalizeAtom);
+          saveState();
+          render();
+          showToast("已恢复本地备份");
+        } catch (e) {
+          alert("备份恢复失败：" + e.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function exportVault(atomSubset, zipName) {
+      const atoms = atomSubset || state.atoms;
+      if (atoms.length === 0) {
+        alert("没有可导出的想法");
+        return;
+      }
+      const zip = new JSZip();
+      const atomsFolder = zip.folder("vault/Atoms");
+      const mocLines = ["# Inbox MOC", "", "由 TraceAI 导出。", ""];
+      atoms.forEach((a) => {
+        const fname = slugify(a.title) + "-" + a.id.slice(-6) + ".md";
+        const fm = [
+          "---",
+          `status: ${a.status}`,
+          `visibility: ${a.visibility}`,
+          `tags: [${(a.tags || []).map((t) => `"${t}"`).join(", ")}]`,
+          `created: ${a.createdAt}`,
+          "---",
+          "",
+          `# ${a.title}`,
+          "",
+          a.body,
+          "",
+          a.next_step ? `## 下一步\n\n${a.next_step}` : "",
+        ].join("\n");
+        atomsFolder.file(fname, fm);
+        mocLines.push(`- [[${fname.replace(/\.md$/, "")}]] — ${a.status}`);
+      });
+      zip.file("vault/MOCs/inbox.md", mocLines.join("\n"));
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, zipName);
+    }
+
+    function exportSharePack() {
+      const pack = buildSharePack();
+      if (pack.atoms.length === 0) {
+        alert("请先在想法卡片上勾选「可对外展示」");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
+      downloadBlob(blob, "traceai-share-" + new Date().toISOString().slice(0, 10) + ".json");
+      showToast(`已导出 ${pack.atoms.length} 条可展示想法`);
+    }
+
+    async function exportShowcaseHtml() {
+      const pack = buildSharePack();
+      if (pack.atoms.length === 0) {
+        alert("请先标记「可对外展示」的想法");
+        return;
+      }
+      let template;
+      try {
+        const res = await fetch("showcase.html");
+        template = await res.text();
+      } catch (e) {
+        alert("无法加载 showcase.html 模板，请通过本地服务器打开 TraceAI");
+        return;
+      }
+      const embed = "const embedded = " + JSON.stringify(pack) + ";";
+      const html = template.replace(/const embedded = null; \/\* EXPORT_EMBED \*\//, embed);
+      downloadBlob(new Blob([html], { type: "text/html" }), "traceai-showcase-" + new Date().toISOString().slice(0, 10) + ".html");
+      showToast("已生成独立展示页，可单独托管或发链接");
+    }
+
+    function previewShowcase() {
+      const pack = buildSharePack();
+      if (pack.atoms.length === 0) {
+        alert("请先标记「可对外展示」的想法");
+        return;
+      }
+      const w = window.open("", "_blank");
+      const atomsHtml = pack.atoms
+        .map(
+          (a) => `<article style="margin:1rem 0;padding:1rem;border:1px solid #333;border-radius:8px">
+        <h2 style="margin:0 0 .5rem;font-size:1rem">${escapeHtml(a.title)}</h2>
+        <p style="color:#8b95a8;font-size:.85rem">${escapeHtml(a.status)} · ${(a.tags || []).join(", ")}</p>
+        <p>${escapeHtml(a.body)}</p>
+        ${a.next_step ? `<p><strong>下一步</strong>：${escapeHtml(a.next_step)}</p>` : ""}
+      </article>`
+        )
+        .join("");
+      w.document.write(`<!DOCTYPE html><html lang=zh-CN><head><meta charset=utf-8><title>预览 · ${escapeHtml(pack.title)}</title>
+        <style>body{font-family:system-ui;background:#0c0f14;color:#e8ecf4;max-width:720px;margin:0 auto;padding:1.5rem}</style></head>
+        <body><h1>${escapeHtml(pack.title)}</h1><p style="color:#8b95a8">TraceAI 预览 · 仅包含你勾选可展示的内容</p>${atomsHtml}</body></html>`);
+      w.document.close();
+    }
+
+    async function loadDemo() {
+      try {
+        const res = await fetch("sample/conversations.sample.json");
+        const data = await res.json();
+        const { sessions, atoms } = parseClaudeExport(data);
+        ingestData(sessions, atoms);
+      } catch (e) {
+        alert("加载示例失败。请用 python3 -m http.server 或 GitHub Pages 访问。");
+      }
+    }
+
+    document.getElementById("file-input").onchange = (e) => {
+      const f = e.target.files[0];
+      if (f) handleClaudeFile(f);
+      e.target.value = "";
+    };
+    document.getElementById("backup-input").onchange = (e) => {
+      const f = e.target.files[0];
+      if (f) importLocalBackup(f);
+      e.target.value = "";
+    };
+    document.getElementById("btn-demo").onclick = loadDemo;
+    document.getElementById("btn-backup").onclick = exportLocalBackup;
+    document.getElementById("btn-export-full").onclick = () =>
+      exportVault(state.atoms, "traceai-vault-full-" + new Date().toISOString().slice(0, 10) + ".zip");
+    document.getElementById("btn-export-share").onclick = () => {
+      const sub = getShareableAtoms();
+      if (!sub.length) { alert("请先勾选「可对外展示」"); return; }
+      exportVault(sub, "traceai-vault-shareable-" + new Date().toISOString().slice(0, 10) + ".zip");
+    };
+    document.getElementById("btn-share-pack").onclick = exportSharePack;
+    document.getElementById("btn-showcase").onclick = exportShowcaseHtml;
+    document.getElementById("btn-preview").onclick = previewShowcase;
+    document.getElementById("btn-clear").onclick = () => {
+      if (confirm("清空本机全部 TraceAI 数据？此操作不可恢复。")) {
+        state = { sessions: [], atoms: [], activeTab: "map", mapShareableOnly: false };
+        saveState();
+        render();
+      }
+    };
+    document.getElementById("search").oninput = render;
+
+    state = loadState();
+    render();
+  </script>
+</body>
+</html>
